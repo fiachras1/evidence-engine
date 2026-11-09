@@ -1,0 +1,10 @@
+# Raw data and the database stay on your machine, never on GitHub
+data/
+# Your API key lives here
+.env
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
