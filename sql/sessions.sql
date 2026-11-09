@@ -66,7 +66,8 @@ SELECT
     round(100 * (r.ib_high - r.ib_low) / nullif(r.rth_high - r.rth_low, 0), 1) AS ib_pct_of_range,
     o.on_high, o.on_low,
     r.rth_volume,
-    r.rth_bars            -- a full day is about 390; far fewer means a half day
+    r.rth_bars,           -- a full day is 390 one-minute bars
+    r.rth_bars >= 380     AS full_day   -- FALSE = US holiday or half day: exclude from tests
 FROM rth r
 LEFT JOIN overnight o USING (session_date)
 ORDER BY r.session_date;

@@ -43,7 +43,8 @@ The date range and symbol are set in `src/config.py`.
   traded prices and are not back-adjusted, so there is a price jump at each
   quarterly roll. Daily stats are unaffected; multi-day composites that span
   a roll are.
-- `rth_bars` far below 390 marks a half day.
+- `full_day` is FALSE on US holidays and half days (CME trades a short session
+  while stocks are closed). Filter these out when testing beliefs.
 - `data/` and `.env` are git-ignored.
 
 ## Findings
