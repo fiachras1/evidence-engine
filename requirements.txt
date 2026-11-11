@@ -4,3 +4,5 @@ pandas
 pyarrow
 python-dotenv
 pytz
+scipy
+matplotlib
