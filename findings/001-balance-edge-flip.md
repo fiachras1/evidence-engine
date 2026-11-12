@@ -1,6 +1,6 @@
 # 001: Balance-edge flip
 
-**Status:** defined, not yet run. Waiting on 1-second data and the ledge-detector check.
+**Status:** first run complete (12 November 2026). No edge found with these rules.
 **Defined:** 11 November 2026
 
 ## Question
@@ -65,6 +65,48 @@ returns to it for the first time. RTH bars only. 477 sessions.
 - 81 of the 169 returned in the same session they left.
 - 10 more ledges were left and had not been retested by the end of the data.
 
-## Results
+## Changes to the definitions before the outcome run (12 November 2026)
 
-Outcomes not yet measured.
+Made after the setup count and before any outcome was seen:
+
+- Balance requirement dropped (too rare; the ledge grade does the same job)
+- Hold changed from 75 to 50 points
+- Entry at the near edge of the ledge zone; hold measured from the near edge;
+  fail = 25 points beyond the far edge. Risk = zone width + 25 points
+- Same-session returns count (every graded ledge comes from earlier sessions)
+- The result of every trade is saved in R (table `results_001`)
+
+Made after the first outcome run, to fix an artefact: setups where the
+session opened already at or past the ledge are left out (24 of 169). Price
+got there overnight, so there was no RTH retest to trade, and 19 of them
+opened beyond the stop.
+
+## Results (`python src/test_001.py`)
+
+145 trades. Average zone width 20 points, average risk 45 points.
+
+| Group | Trades | Hold % | Break-even % | Avg R | +/- |
+|---|---|---|---|---|---|
+| Ledges | 145 | 46.2 | 47.1 | +0.01 | 0.09 |
+| Placebo (same trade 60 pts before the ledge) | 153 | 42.5 | 47.1 | -0.10 | 0.09 |
+| Ledges, B and better | 45 | 48.9 | 45.7 | +0.09 | 0.17 |
+| Ledges, C | 100 | 45.0 | 47.7 | -0.03 | 0.11 |
+| Ledges, same-session return | 81 | 50.6 | 47.4 | +0.10 | 0.12 |
+| Ledges, later-session return | 64 | 40.6 | 46.7 | -0.11 | 0.14 |
+
+## Reading
+
+- Traded mechanically with these rules, graded ledges break even: +0.01R per
+  trade, and the uncertainty (0.09) is far larger than the result.
+- Ledges did slightly better than the placebo, but the gap (0.11R) is within
+  the noise for samples this size.
+- No subgroup is distinguishable from zero. The grade ordering (B and better
+  ahead of C) points the expected way but is not reliable at 45 trades.
+
+## Limits
+
+- The ledge detector has been checked against one hand-marked screenshot
+- A fixed 50/25 trade with no order-flow confirmation is not how the level is
+  actually traded
+- Average risk (45 points) is wider than the 30-point maximum stop
+- 145 trades can only detect a large edge (roughly 0.2R per trade or more)

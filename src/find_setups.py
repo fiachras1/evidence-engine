@@ -19,7 +19,6 @@ import config
 
 LEAVE_PTS = 100          # how far price must travel beyond the ledge to have left it
 WATCH_SESSIONS = 5       # a ledge must be left within this many sessions of last being graded
-BALANCE_PTS = 25         # balance: VAH and VAL each within this of the day before
 
 con = duckdb.connect(str(config.DB_PATH))
 
@@ -34,22 +33,10 @@ dates = sorted(bars_by_day)
 
 gap = {r[0]: r[1] for r in con.execute(
     "SELECT session_date, roll_gap_total FROM session_contract").fetchall()}
-value = {r[0]: (r[1], r[2]) for r in con.execute(
-    "SELECT session_date, val, vah FROM profile_levels WHERE window_days = 1").fetchall()}
 grades = {}
 for r in con.execute("""SELECT session_date, grade, low, high, side
                         FROM ledge_grades ORDER BY session_date""").fetchall():
     grades.setdefault(r[0], []).append(r[1:])
-
-
-def in_balance(i):
-    """Were the last two sessions' value areas lined up? (prices on today's contract)"""
-    if i == 0:
-        return False
-    today, before = dates[i], dates[i - 1]
-    move = gap[today] - gap[before]
-    return (abs(value[today][0] - value[before][0] - move) <= BALANCE_PTS and
-            abs(value[today][1] - value[before][1] - move) <= BALANCE_PTS)
 
 
 watching, setups = [], []
@@ -80,7 +67,7 @@ for i, today in enumerate(dates):
             g["state"] = "returned"
             setups.append(dict(
                 first_seen=g["first_seen"], last_seen=dates[g["last_seen_i"]], grade=g["grade"],
-                side=g["side"], low=low, high=high, in_balance=g["in_balance"],
+                side=g["side"], low=low, high=high,
                 left_at=g["left_at"], returned_at=times[k], return_date=today,
                 sessions_to_return=i - g["left_i"]))
     watching = still
@@ -102,8 +89,7 @@ for i, today in enumerate(dates):
                 watching.append(match)
             match["last_seen_i"] = i
             if match["state"] == "watching":            # zone and grade freeze once price leaves
-                match.update(low=low, high=high, grade=grade, priced_on=today,
-                             in_balance=in_balance(i))
+                match.update(low=low, high=high, grade=grade, priced_on=today)
 
 unreturned = sum(g["state"] == "left" for g in watching)
 found = pd.DataFrame(setups)
@@ -113,7 +99,6 @@ con.execute("CREATE OR REPLACE TABLE setups_001 AS SELECT * FROM new_rows")
 print(f"Setups found: {len(found)}  (left but not yet returned by the end of the data: {unreturned})")
 print(con.sql("""
     SELECT grade, count(*) AS setups,
-           count(*) FILTER (WHERE in_balance) AS from_a_balance,
            count(*) FILTER (WHERE side = 'top') AS retest_from_above,
            count(*) FILTER (WHERE side = 'bottom') AS retest_from_below
     FROM setups_001 GROUP BY grade ORDER BY grade
