@@ -45,6 +45,26 @@ the break-even hold rate is 25% before costs.
 2. Ledge detector checked against hand-marked ledges from screenshots (one screenshot checked so far, 7 Sep 2026: main ledge matched)
 3. Count how often the setup occurs before running the full test
 
+## Step 1: setup count (12 November 2026)
+
+Counted before measuring any outcomes (`python src/find_setups.py`).
+A setup = graded ledge, price leaves it by 100+ points on the thin side, then
+returns to it for the first time. RTH bars only. 477 sessions.
+
+| Grade | Setups | Return in a later session |
+|---|---|---|
+| A | 5 | 4 |
+| B+ | 5 | 2 |
+| B | 43 | 22 |
+| C | 116 | 60 |
+| All | 169 | 88 |
+
+- Only 9 of the 169 came from a balance as defined above (VAH and VAL each
+  within 25 points of the day before). That definition is too strict to use
+  as a requirement.
+- 81 of the 169 returned in the same session they left.
+- 10 more ledges were left and had not been retested by the end of the data.
+
 ## Results
 
-Not yet run.
+Outcomes not yet measured.
