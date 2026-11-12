@@ -67,7 +67,10 @@ The date range and symbol are set in `src/config.py`.
   levels available going into a trading day are the previous session's row.
 - Composites that span a quarterly roll shift the older contract's prices by
   the roll gap, and are marked `spans_roll`.
-- HVN / LVN / ledge detection settings are in `src/config.py`.
+- A ledge is where a volume node falls steeply into a thin area. Ledges are
+  graded A, B or C by how many profiles show them at the same price
+  (`python src/show_ledges.py 2026-09-07`).
+- HVN / LVN / ledge detection and grading settings are in `src/config.py`.
 
 ## Findings
 

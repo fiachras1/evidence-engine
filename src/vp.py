@@ -1,4 +1,6 @@
 """Volume profile maths: composites, value area, HVNs, LVNs and ledges."""
+from collections import namedtuple
+
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
@@ -85,34 +87,134 @@ def value_area(vol, share=config.VALUE_AREA):
 def find_nodes(prices, vol, window):
     """Find HVNs, LVNs and ledges in one profile.
 
-    Returns a list of (kind, price, strength, note).
+    Returns (nodes, ledges, smooth).
 
-    HVN    a peak in the smoothed profile that stands out from its surroundings.
-           strength = its volume as a share of the POC's volume.
-    LVN    a dip between two peaks. strength = its volume as a share of the POC's
-           (lower = thinner).
-    LEDGE  a price where volume falls away sharply: within LEDGE_SPAN_PTS the
-           profile drops by at least LEDGE_MIN_DROP of the POC's volume.
-           price = middle of the drop. strength = size of the drop.
-           note says which side the volume shelf is on.
+    nodes   list of (kind, price, strength)
+            HVN  a peak in the smoothed profile that stands out from its surroundings
+            LVN  a dip between two peaks
+            strength = volume there as a share of the POC's volume
+    ledges  list of Ledge (see find_ledges)
+    smooth  the smoothed profile
     """
     smooth = gaussian_filter1d(vol, config.SMOOTH_PTS[window] * ROWS_PER_POINT)
     top = smooth.max()
     need = config.NODE_MIN_PROMINENCE * top
-    nodes = []
+    peaks = find_peaks(smooth, prominence=need)[0]
+    dips = find_peaks(-smooth, prominence=need)[0]
 
-    for i in find_peaks(smooth, prominence=need)[0]:
-        nodes.append(("HVN", prices[i], smooth[i] / top, ""))
-    for i in find_peaks(-smooth, prominence=need)[0]:
-        nodes.append(("LVN", prices[i], smooth[i] / top, ""))
+    nodes = [("HVN", prices[i], smooth[i] / top) for i in peaks]
+    nodes += [("LVN", prices[i], smooth[i] / top) for i in dips]
+    ledges = find_ledges(prices, smooth, peaks, dips)
+    return sorted(nodes, key=lambda n: -n[1]), ledges, smooth
 
-    half = max(1, round(config.LEDGE_SPAN_PTS[window] * ROWS_PER_POINT / 2))
-    change = np.zeros_like(smooth)
-    change[half:-half] = smooth[2 * half:] - smooth[:-2 * half]   # volume above minus below
-    steep, _ = find_peaks(np.abs(change), height=config.LEDGE_MIN_DROP * top,
-                          distance=2 * half)
-    for i in steep:
-        side = "shelf below" if change[i] < 0 else "shelf above"
-        nodes.append(("LEDGE", prices[i], abs(change[i]) / top, side))
 
-    return sorted(nodes, key=lambda n: -n[1]), smooth
+Ledge = namedtuple("Ledge", "low high width fall size node side wide")
+
+
+def find_ledges(prices, smooth, peaks, dips):
+    """Find ledges: where a volume node falls away steeply into a thin area.
+
+    For every node (HVN), look at the nearest thin area on each side: the next
+    LVN, or the end of the profile. If volume falls far enough between them,
+    the ledge is the middle half of that slope (from 25% to 75% of the fall).
+
+    Each Ledge has:
+      low, high   the price zone of the ledge
+      width       high - low, in points
+      fall        how much volume falls, as a share of the node's own volume
+      size        the same fall as a share of the POC's volume
+      node        the node's share of the whole profile's volume
+      side        "top" (thin area above the node) or "bottom" (thin area below)
+      wide        True if wider than LEDGE_MAX_WIDTH
+    """
+    top, total = smooth.max(), smooth.sum()
+    thin = [0] + list(dips) + [len(smooth) - 1]      # profile ends count as thin areas
+    ledges = []
+    for h in peaks:
+        below = max((t for t in thin if t < h), default=None)
+        above = min((t for t in thin if t > h), default=None)
+        # the node is everything between the thin areas either side of the peak
+        node = smooth[(below or 0):(above or len(smooth) - 1) + 1].sum() / total
+        for t, side in ((below, "bottom"), (above, "top")):
+            if t is None:
+                continue
+            drop = smooth[h] - smooth[t]
+            if drop < config.LEDGE_MIN_FALL * smooth[h] or drop < config.LEDGE_MIN_SIZE * top:
+                continue
+            if node < config.LEDGE_MIN_NODE:       # ledges of small nodes are ignored
+                continue
+            a, b = sorted((h, t))
+            slope = smooth[a:b + 1]
+            steep = np.flatnonzero((slope >= smooth[t] + 0.25 * drop) &
+                                   (slope <= smooth[t] + 0.75 * drop))
+            if len(steep) == 0:        # fall happens within a single row
+                steep = np.array([len(slope) // 2])
+            low, high = prices[a + steep.min()], prices[a + steep.max()]
+            width = high - low
+            ledges.append(Ledge(low, high, width, drop / smooth[h], drop / top,
+                                node, side, width > config.LEDGE_MAX_WIDTH))
+    return sorted(ledges, key=lambda g: -g.low)
+
+
+def grade_ledges(daily, five_day, twenty_day, last_low, last_high):
+    """Grade ledges by how many profiles agree on them.
+
+    daily        {session date: [Ledge, ...]} for the daily profiles being compared
+    five_day     [Ledge, ...] from the 5-day profile
+    twenty_day   [Ledge, ...] from the 20-day profile
+    last_low, last_high   the latest session's RTH low and high
+
+    A ledge is graded when at least 2 daily profiles show a ledge on the same
+    side within GRADE_TOLERANCE points of each other. Wide ledges are ignored.
+    Two graded ledges within GRADE_TOLERANCE of each other become one: the
+    higher grade wins, and equal grades are merged.
+    status is "pending" while the latest session traded through the ledge,
+    otherwise "active".
+    Returns a list of (grade, low, high, side, days, in_5d, in_20d, status).
+    """
+    tol = config.GRADE_TOLERANCE
+    rank = config.GRADE_ORDER.index
+    graded = []
+    for side in ("top", "bottom"):
+        found = sorted((g.low, g.high, day) for day, ledges in daily.items()
+                       for g in ledges if g.side == side and not g.wide)
+        groups = []
+        for low, high, day in found:
+            if groups and low - groups[-1]["high"] <= tol:
+                groups[-1]["high"] = max(groups[-1]["high"], high)
+                groups[-1]["days"].add(day)
+            else:
+                groups.append({"low": low, "high": high, "days": {day}})
+        for grp in groups:
+            if len(grp["days"]) < 2:
+                continue
+
+            def agrees(ledges):
+                return any(g.side == side and not g.wide and
+                           g.low <= grp["high"] + tol and g.high >= grp["low"] - tol
+                           for g in ledges)
+
+            in_5d, in_20d = agrees(five_day), agrees(twenty_day)
+            grade = "A" if in_5d and in_20d else "B+" if in_20d else "B" if in_5d else "C"
+            graded.append([grade, grp["low"], grp["high"], side,
+                           len(grp["days"]), in_5d, in_20d])
+
+    # ledges within tolerance of each other: keep the higher grade, merge equal grades
+    graded.sort(key=lambda r: r[1])
+    kept = []
+    for row in graded:
+        if kept and row[1] - kept[-1][2] <= tol:
+            prev = kept[-1]
+            if rank(row[0]) < rank(prev[0]):
+                kept[-1] = row
+            elif row[0] == prev[0]:
+                prev[2] = max(prev[2], row[2])
+                prev[3] = prev[3] if prev[3] == row[3] else "both"
+                prev[4] = max(prev[4], row[4])
+        else:
+            kept.append(row)
+
+    for row in kept:
+        traded_through = last_low <= row[2] and last_high >= row[1]
+        row.append("pending" if traded_through else "active")
+    return [tuple(r) for r in sorted(kept, key=lambda r: -r[1])]

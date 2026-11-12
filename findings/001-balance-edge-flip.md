@@ -17,7 +17,9 @@ return, the side that won should defend the edge it broke through.
 | Term | Definition |
 |---|---|
 | Balance | 2 or more consecutive sessions where each day's VAH is within 25 points of the other days' VAHs, and each VAL within 25 points of the other VALs |
-| Edge | The ledge (sharp drop in volume) on the side of the balance price left. Not necessarily the VAH/VAL |
+| Edge | The ledge on the side of the balance price left. Not necessarily the VAH/VAL. A ledge is where a volume node falls by 40% or more into a thin area, in a zone no wider than 15 points, from a node holding at least 10% of the profile's volume |
+| Ledge grade | A = on 2+ daily profiles, the 5-day and the 20-day. B+ = 2+ daily and the 20-day. B = 2+ daily and the 5-day. C = 2+ daily only. Daily profiles compared: the last 5 sessions, plus earlier ones while price stayed in the same range. Results are reported per grade |
+| Active ledge | A ledge only counts once price has left it: the latest RTH session did not trade through it |
 | Leaving | Price extends 100 points or more beyond the edge |
 | Retest | The first return to the edge after leaving. No session limit: the number of sessions until the retest is recorded |
 | Hold | Price moves 75 points away from the edge before trading 25 points through it |
@@ -40,7 +42,7 @@ the break-even hold rate is 25% before costs.
 ## Prerequisites
 
 1. 1-second bars downloaded and loaded
-2. Ledge detector checked against hand-marked ledges from screenshots
+2. Ledge detector checked against hand-marked ledges from screenshots (one screenshot checked so far, 7 Sep 2026: main ledge matched)
 3. Count how often the setup occurs before running the full test
 
 ## Results

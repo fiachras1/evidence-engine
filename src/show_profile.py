@@ -35,7 +35,7 @@ if i < window - 1:
 window_dates = dates[i - window + 1:i + 1]
 prices, vol = vp.composite(window_dates, profiles, gaps)
 poc, val, vah = vp.value_area(vol)
-nodes, smooth = vp.find_nodes(prices, vol, window)
+nodes, ledges, smooth = vp.find_nodes(prices, vol, window)
 
 title = f"NQ {window}-day profile, {window_dates[0]:%d %b} to {day:%d %b %Y}" \
     if window > 1 else f"NQ daily profile, {day:%a %d %b %Y}"
@@ -43,8 +43,12 @@ print(f"\n{title}")
 if len({contracts[d] for d in window_dates}) > 1:
     print("  (spans a contract roll: older sessions shifted by the roll gap)")
 print(f"  VAH   {prices[vah]:.2f}\n  POC   {prices[poc]:.2f}\n  VAL   {prices[val]:.2f}")
-for kind, price, strength, note in nodes:
-    print(f"  {kind:<5} {price:.2f}   {strength:>4.0%}  {note}")
+for kind, price, strength in nodes:
+    print(f"  {kind:<5} {price:.2f}   {strength:>4.0%}")
+print("  Ledges (wide ones are not graded):")
+for g in ledges:
+    print(f"    {g.low:.2f} to {g.high:.2f}   {g.width:>5.2f} pts   {g.side:<6} of node, "
+          f"falls {g.fall:.0%}, node holds {g.node:.0%}{'   WIDE' if g.wide else ''}")
 
 # ---- chart -------------------------------------------------------------------
 fig, ax = plt.subplots(figsize=(8, 10))
@@ -56,10 +60,13 @@ edge = vol.max() * 1.02
 for name, idx, colour in (("VAH", vah, "#555555"), ("POC", poc, "#d62728"), ("VAL", val, "#555555")):
     ax.axhline(prices[idx], color=colour, linewidth=1)
     ax.text(edge, prices[idx], f" {name} {prices[idx]:.2f}", va="center", color=colour, fontsize=8)
-colours = {"HVN": "#2ca02c", "LVN": "#ff7f0e", "LEDGE": "#9467bd"}
-for kind, price, strength, note in nodes:
+colours = {"HVN": "#2ca02c", "LVN": "#ff7f0e"}
+for kind, price, strength in nodes:
     ax.axhline(price, color=colours[kind], linewidth=0.8, linestyle="--")
     ax.text(edge, price, f" {kind} {price:.2f}", va="center", color=colours[kind], fontsize=8)
+for g in ledges:                      # ledges are shaded zones; wide ones are fainter
+    ax.axhspan(g.low - vp.ROW_HEIGHT / 2, g.high + vp.ROW_HEIGHT / 2,
+               color="#9467bd", alpha=0.15 if g.wide else 0.45, linewidth=0)
 ax.set_xlim(0, vol.max() * 1.25)
 ax.set_title(title)
 ax.set_xlabel(f"Volume (contracts per {config.ROW_TICKS}-tick row)")
