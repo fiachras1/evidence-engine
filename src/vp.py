@@ -167,7 +167,8 @@ def grade_ledges(daily, five_day, twenty_day, last_low, last_high):
     A ledge is graded when at least 2 daily profiles show a ledge on the same
     side within GRADE_TOLERANCE points of each other. Wide ledges are ignored.
     Two graded ledges within GRADE_TOLERANCE of each other become one: the
-    higher grade wins, and equal grades are merged.
+    higher grade wins, and equal grades are merged. A ledge must be within
+    tolerance of every ledge in a group to join it, so zones cannot chain.
     status is "pending" while the latest session traded through the ledge,
     otherwise "active".
     Returns a list of (grade, low, high, side, days, in_5d, in_20d, status).
@@ -180,11 +181,14 @@ def grade_ledges(daily, five_day, twenty_day, last_low, last_high):
                        for g in ledges if g.side == side and not g.wide)
         groups = []
         for low, high, day in found:
-            if groups and low - groups[-1]["high"] <= tol:
+            # join the group only if within tolerance of EVERY ledge already in it
+            # ("nearest" is the lowest top edge in the group), so groups cannot chain
+            if groups and low - groups[-1]["nearest"] <= tol:
                 groups[-1]["high"] = max(groups[-1]["high"], high)
+                groups[-1]["nearest"] = min(groups[-1]["nearest"], high)
                 groups[-1]["days"].add(day)
             else:
-                groups.append({"low": low, "high": high, "days": {day}})
+                groups.append({"low": low, "high": high, "nearest": high, "days": {day}})
         for grp in groups:
             if len(grp["days"]) < 2:
                 continue
@@ -197,22 +201,29 @@ def grade_ledges(daily, five_day, twenty_day, last_low, last_high):
             in_5d, in_20d = agrees(five_day), agrees(twenty_day)
             grade = "A" if in_5d and in_20d else "B+" if in_20d else "B" if in_5d else "C"
             graded.append([grade, grp["low"], grp["high"], side,
-                           len(grp["days"]), in_5d, in_20d])
+                           len(grp["days"]), in_5d, in_20d, grp["nearest"]])
 
     # ledges within tolerance of each other: keep the higher grade, merge equal grades
     graded.sort(key=lambda r: r[1])
     kept = []
+    widest = 2 * config.LEDGE_MAX_WIDTH + tol     # two full-width ledges, tolerance apart
     for row in graded:
-        if kept and row[1] - kept[-1][2] <= tol:
+        if kept and row[1] - kept[-1][2] <= tol:        # zones within tolerance of each other
             prev = kept[-1]
             if rank(row[0]) < rank(prev[0]):
-                kept[-1] = row
-            elif row[0] == prev[0]:
+                kept[-1] = row                          # higher grade wins
+            elif row[0] != prev[0]:
+                pass                                    # lower grade is dropped
+            elif max(prev[2], row[2]) - prev[1] > widest:
+                kept.append(row)                        # merging would make the zone too wide
+            else:                                       # same grade: merge
                 prev[2] = max(prev[2], row[2])
                 prev[3] = prev[3] if prev[3] == row[3] else "both"
                 prev[4] = max(prev[4], row[4])
+                prev[5], prev[6] = prev[5] or row[5], prev[6] or row[6]
         else:
             kept.append(row)
+    kept = [row[:7] for row in kept]
 
     for row in kept:
         traded_through = last_low <= row[2] and last_high >= row[1]
