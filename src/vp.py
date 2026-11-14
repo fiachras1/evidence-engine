@@ -241,6 +241,8 @@ def end_node(prices, vol, window, end):
       share       the node's share of the whole profile's volume
       thinnest    volume at the thinnest point between the node and the POC,
                   as a share of the POC's volume
+      main_low, main_high   the main balance: where volume around the POC is
+                  at least half the POC's
     The node runs from the thin area (LVN) that separates it from the rest of
     the profile out to the end of the profile.
     """
@@ -262,5 +264,13 @@ def end_node(prices, vol, window, end):
     poc = int(np.argmax(smooth))
     a, b = sorted((peak, poc))
     between = None if start <= poc <= stop else float(smooth[a:b + 1].min() / smooth[poc])
+    # the main balance: the stretch around the POC where volume is at least half the POC's
+    half = smooth >= 0.5 * smooth[poc]
+    m_lo = m_hi = poc
+    while m_lo > 0 and half[m_lo - 1]:
+        m_lo -= 1
+    while m_hi < len(smooth) - 1 and half[m_hi + 1]:
+        m_hi += 1
     return dict(low=prices[body.min()], high=prices[body.max()], peak=prices[peak],
-                share=smooth[start:stop + 1].sum() / smooth.sum(), thinnest=between)
+                share=smooth[start:stop + 1].sum() / smooth.sum(), thinnest=between,
+                main_low=prices[m_lo], main_high=prices[m_hi])

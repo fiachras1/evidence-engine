@@ -171,3 +171,45 @@ Both periods together (31 months):
   zero. The 90-point target shows nothing.
 - Status: an unconfirmed lead. The cheapest further evidence is logging each
   new setup as it happens.
+
+## Time-based versions of the thin idea (14 November 2026)
+
+The whole-day measure above mixes the move out with the move back. These two
+look only at bars after price last traded inside the micro balance, and only
+at the range between the micro balance and the main balance (the stretch
+around the POC with at least half the POC's volume).
+
+| Measure | Definition | "Thin" |
+|---|---|---|
+| Volume per point | Volume traded in that range on the way back, per point, divided by the day's average volume per point | 0.30 or less |
+| TPO count | Average number of 30-minute periods that traded at each row of that range on the way back (1 = single prints) | 1.61 or less |
+
+Thresholds are the middle value across all 249 setups, so they use no
+outcomes. All 55 trades (both periods), before costs:
+
+| Group | Trades | Win % (60) | Avg R (60) | +/- | Avg R (90) |
+|---|---|---|---|---|---|
+| Volume per point: thin | 24 | 41.7 | +0.42 | 0.35 | -0.04 |
+| Volume per point: not thin | 24 | 41.7 | +0.42 | 0.35 | +0.34 |
+| TPO: thin | 21 | 52.4 | +0.78 | 0.38 | +0.10 |
+| TPO: not thin | 27 | 33.3 | +0.13 | 0.31 | +0.19 |
+| No range between micro balance and main balance | 7 | 14.3 | -0.51 | 0.49 | -0.34 |
+
+### Reading
+
+- Volume per point separates nothing: both halves are identical at 60 points.
+- TPO count separates the trades at the 60-point target (+0.78R against
+  +0.13R) but not at 90 points.
+- This is the third "thin" measure tried on the same trades, with no unused
+  data left. One of three looking good is what chance alone would often give.
+- The TPO-thin trades and the whole-day-thin trades are mostly different
+  trades (8 in common out of 21 and 24), so the two measures are not
+  capturing the same thing.
+- When the micro balance touches the main balance (no range between them),
+  the trade lost 6 times out of 7. Small sample, but it fits the idea that a
+  micro balance needs to be separate from value.
+
+### Candidate rule for forward testing
+
+Micro balance (run 2 rules) with a TPO-thin return leg, 60-point target.
+To be judged only on setups that occur after 14 November 2026.

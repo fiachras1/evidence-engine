@@ -82,11 +82,12 @@ for i in range(1, len(dates)):
         setups.append(dict(session_date=today, end=end, low=node["low"], high=node["high"],
                            value_mid=(value[today][0] + value[today][1]) / 2,
                            share=round(node["share"], 3), thinnest=node["thinnest"],
+                           main_low=node["main_low"], main_high=node["main_high"],
                            day_high=high, day_low=low, close=close))
 
 # ---- 2) follow each one on 1-second bars ------------------------------------------
 b = con.execute("""
-    SELECT epoch_ns(ts_event) AS t, open, high, low, s.roll_gap_total AS gap,
+    SELECT epoch_ns(ts_event) AS t, open, high, low, volume, s.roll_gap_total AS gap,
            CAST(ts_ny AS DATE) AS session_date
     FROM (SELECT *, ts_event AT TIME ZONE 'America/New_York' AS ts_ny FROM bars_1s) x
     JOIN session_contract s ON s.session_date = CAST(x.ts_ny AS DATE)
@@ -94,6 +95,7 @@ b = con.execute("""
     ORDER BY ts_event
 """).fetchnumpy()
 T, OPEN, HIGH, LOW, GAP, DAY = b["t"], b["open"], b["high"], b["low"], b["gap"], b["session_date"]
+VOLUME = b["volume"].astype("float64")
 FIRST = np.r_[True, DAY[1:] != DAY[:-1]]
 day_index = pd.DatetimeIndex(DAY).date if DAY.dtype.kind == "M" else DAY
 last_bar = {}                                             # session date -> index of its last bar
@@ -103,6 +105,58 @@ first_bar = {pd.Timestamp(DAY[idx]).date(): int(idx) for idx in np.flatnonzero(F
 session_number = {d: n for n, d in enumerate(dates)}
 range_5d = {r[0]: (r[1], r[2]) for r in con.execute(
     "SELECT session_date, low, high FROM profile_levels WHERE window_days = 5").fetchall()}
+
+
+def return_leg(s):
+    """How was the move from the micro balance back to the main balance built?
+
+    Looks only at bars AFTER price last traded inside the micro balance, and only
+    at the range between the micro balance and the main balance.
+
+    volume_ratio  volume per point in that range on the way back, divided by the
+                  day's average volume per point. Low = little traded there.
+    tpo_mean      average number of 30-minute periods that traded at each price
+                  row in that range on the way back. 1 = single prints.
+    reached       did price get all the way back to the main balance that day?
+    """
+    a, z = first_bar[s["session_date"]], last_bar[s["session_date"]] + 1
+    hi, lo, vol, t = HIGH[a:z], LOW[a:z], VOLUME[a:z], T[a:z]
+    if s["end"] == "high":
+        r_lo, r_hi = s["main_high"], s["low"]
+    else:
+        r_lo, r_hi = s["high"], s["main_low"]
+    out = dict(volume_ratio=np.nan, tpo_mean=np.nan, reached=False)
+    if r_hi - r_lo < vp.ROW_HEIGHT:                       # the two bodies touch: no range between
+        return out
+    inside = (hi >= s["low"]) & (lo <= s["high"])
+    if not inside.any():
+        return out
+    after = len(inside) - int(inside[::-1].argmax())      # first bar after the last one inside
+    hi, lo, vol, t = hi[after:], lo[after:], vol[after:], t[after:]
+    if len(hi) == 0:
+        return out
+    out["reached"] = bool((lo <= r_lo).any() if s["end"] == "high" else (hi >= r_hi).any())
+
+    tick = config.TICK
+    share = np.clip(np.minimum(hi, r_hi) - np.maximum(lo, r_lo) + tick, 0, None) / (hi - lo + tick)
+    per_point = (vol * share).sum() / (r_hi - r_lo + tick)
+    day_per_point = VOLUME[a:z].sum() / (HIGH[a:z].max() - LOW[a:z].min() + tick)
+    out["volume_ratio"] = float(per_point / day_per_point)
+
+    rows = int(round((r_hi - r_lo) / vp.ROW_HEIGHT)) + 1
+    counts = np.zeros(rows)
+    period = (t - T[a]) // (30 * 60 * 1_000_000_000)      # 30-minute periods from the open
+    for p in np.unique(period):
+        m = period == p
+        p_lo, p_hi = max(lo[m].min(), r_lo), min(hi[m].max(), r_hi)
+        if p_hi >= p_lo:                                  # this period traded inside the range
+            i0 = int((p_lo - r_lo) / vp.ROW_HEIGHT)
+            i1 = int((p_hi - r_lo) / vp.ROW_HEIGHT)
+            counts[i0:i1 + 1] += 1
+    touched = counts[counts > 0]
+    if len(touched):
+        out["tpo_mean"] = float(touched.mean())
+    return out
 
 
 def first_true(mask_fn, start):
@@ -164,6 +218,9 @@ def trade(sell, level, priced_on, start, value_mid):
     return out
 
 
+for s in setups:
+    s.update(return_leg(s))
+
 rows = []
 for s in setups:
     sell = s["end"] == "high"                             # micro balance at the high: sell the retest
@@ -215,6 +272,24 @@ for pts in TARGETS:
     be = round(100 * STOP_PTS / (STOP_PTS + pts), 1)
     print(f"\n=== Thin volume between micro balance and value, {pts}-point target ===")
     print(con.sql(summary.format(group=thin, pts=pts, be=be, where="kind = 'micro balance'")))
+
+# Time-based versions of the thin idea: only the move BACK from the micro balance.
+# "Thin" = at or below the middle value across all setups, which uses no outcomes.
+print("\n=== Return leg: how the move back to the main balance was built ===")
+print(con.sql("""
+    SELECT count(*) AS setups,
+           count(*) FILTER (WHERE volume_ratio IS NULL OR isnan(volume_ratio)) AS no_range_between,
+           count(*) FILTER (WHERE reached) AS reached_main_balance_same_day
+    FROM setups_003
+"""))
+for column, label in (("volume_ratio", "volume per point"), ("tpo_mean", "TPO count")):
+    middle = con.execute(f"SELECT median({column}) FROM setups_003 WHERE NOT isnan({column})").fetchone()[0]
+    grp = (f"CASE WHEN {column} IS NULL OR isnan({column}) THEN '3 no range between' "
+           f"WHEN {column} <= {middle} THEN '1 thin return' ELSE '2 not thin' END")
+    for pts in TARGETS:
+        be = round(100 * STOP_PTS / (STOP_PTS + pts), 1)
+        print(f"\n--- By {label} on the way back (thin = {middle:.2f} or less), {pts}-point target ---")
+        print(con.sql(summary.format(group=grp, pts=pts, be=be, where="kind = 'micro balance'")))
 
 # Fresh data: setups from before config.START were never used to choose the rules.
 fresh = f"session_date < DATE '{config.START}'"
