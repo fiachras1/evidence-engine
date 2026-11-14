@@ -81,7 +81,8 @@ for i in range(1, len(dates)):
         counts["closed_back"] += 1
         setups.append(dict(session_date=today, end=end, low=node["low"], high=node["high"],
                            value_mid=(value[today][0] + value[today][1]) / 2,
-                           share=round(node["share"], 3), day_high=high, day_low=low, close=close))
+                           share=round(node["share"], 3), thinnest=node["thinnest"],
+                           day_high=high, day_low=low, close=close))
 
 # ---- 2) follow each one on 1-second bars ------------------------------------------
 b = con.execute("""
@@ -208,6 +209,25 @@ for pts in TARGETS:
     print(con.sql(summary.format(
         group="""CASE WHEN "end" = 'high' THEN 'at the high (sell)' ELSE 'at the low (buy)' END""",
         pts=pts, be=be, where="kind = 'micro balance'")))
+# Thin-volume idea: was the range between the micro balance and the day's value thin?
+thin = f"CASE WHEN thinnest <= {config.MICRO_THIN_MAX} THEN 'thin between' ELSE 'not thin' END"
+for pts in TARGETS:
+    be = round(100 * STOP_PTS / (STOP_PTS + pts), 1)
+    print(f"\n=== Thin volume between micro balance and value, {pts}-point target ===")
+    print(con.sql(summary.format(group=thin, pts=pts, be=be, where="kind = 'micro balance'")))
+
+# Fresh data: setups from before config.START were never used to choose the rules.
+fresh = f"session_date < DATE '{config.START}'"
+if con.execute(f"SELECT count(*) FROM results_003 WHERE {fresh}").fetchone()[0]:
+    for pts in TARGETS:
+        be = round(100 * STOP_PTS / (STOP_PTS + pts), 1)
+        print(f"\n=== FRESH DATA against the original period, {pts}-point target ===")
+        print(con.sql(summary.format(
+            group=f"kind || CASE WHEN {fresh} THEN ': FRESH (before {config.START})' ELSE ': original period' END",
+            pts=pts, be=be, where="true")))
+        print(con.sql(summary.format(
+            group=f"{thin} || CASE WHEN {fresh} THEN ': FRESH' ELSE ': original period' END",
+            pts=pts, be=be, where="kind = 'micro balance'")))
 print("avg_r = average result per trade in R, before costs. plus_minus = its standard error:")
 print("an avg_r smaller than about twice plus_minus is not distinguishable from zero.")
 con.close()

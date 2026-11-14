@@ -239,6 +239,8 @@ def end_node(prices, vol, window, end):
       low, high   the node's zone: where its volume is at least half its peak
       peak        price of the node's peak
       share       the node's share of the whole profile's volume
+      thinnest    volume at the thinnest point between the node and the POC,
+                  as a share of the POC's volume
     The node runs from the thin area (LVN) that separates it from the rest of
     the profile out to the end of the profile.
     """
@@ -255,5 +257,10 @@ def end_node(prices, vol, window, end):
     if not start <= peak <= stop:
         return None
     body = np.flatnonzero(smooth[start:stop + 1] >= 0.5 * smooth[peak]) + start
+    # How thin is the thinnest point between this node and the day's POC?
+    # (as a share of the POC's volume; None if the POC is inside this node)
+    poc = int(np.argmax(smooth))
+    a, b = sorted((peak, poc))
+    between = None if start <= poc <= stop else float(smooth[a:b + 1].min() / smooth[poc])
     return dict(low=prices[body.min()], high=prices[body.max()], peak=prices[peak],
-                share=smooth[start:stop + 1].sum() / smooth.sum())
+                share=smooth[start:stop + 1].sum() / smooth.sum(), thinnest=between)

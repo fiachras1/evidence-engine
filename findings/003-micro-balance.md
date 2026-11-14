@@ -2,8 +2,8 @@
 
 **Status:** two runs on 14 November 2026. Run 1 (no context rules): break-even.
 Run 2 (open rule and expiry rule added): +0.38R per trade at the 60-point
-target over 42 trades, which is too few to rely on. Needs confirming on data
-the rules have never seen.
+target over 42 trades. Fresh-data run (May to December 2024): +0.05R over 13
+trades. Unconfirmed lead; see the end of this note.
 
 ## Question
 
@@ -105,3 +105,69 @@ retested, 42 were traded.
 
 Freeze these rules. Run them once on earlier history (before January 2025)
 and treat that as the real test.
+
+## Thin-volume idea, tested on the original period (14 November 2026)
+
+Idea: a micro balance is more worth trading when the range between it and the
+day's value was built on thin volume, showing the move back was aggressive
+and the other side was not willing to participate.
+
+Measure: volume at the thinnest point between the micro balance and the day's
+POC, as a share of the POC's volume (whole-day profile, so it does not
+separate the move up from the move back). "Thin" = 17% or less, which is the
+middle value across all 194 setups, fixed before looking at results.
+
+| Group | Trades | Win % (60) | Avg R (60) | +/- | Avg R (90) | +/- |
+|---|---|---|---|---|---|---|
+| Thin between | 17 | 47.1 | +0.60 | 0.42 | +0.35 | 0.52 |
+| Not thin | 25 | 36.0 | +0.22 | 0.33 | -0.08 | 0.38 |
+
+The direction supports the idea at both targets. 17 trades cannot confirm it.
+
+By year, all 42 trades at the 60-point target: 2025 was -0.15R (16 trades),
+2026 was +0.70R (26 trades). The result is not steady across the period.
+
+## Fresh-data run
+
+Two tests, both declared in advance, rules frozen as above:
+
+1. All micro balance trades (run 2 rules)
+2. Only the "thin between" ones (17% threshold unchanged)
+
+Earlier history (`EARLY_START` in `src/config.py` up to January 2025) is
+downloaded with `python src/download.py early`, and `python src/test_003.py`
+then reports the fresh period separately for both.
+
+### Result (14 November 2026)
+
+Fresh period: 1 May 2024 to 31 December 2024, 174 sessions, never used to
+choose any rule. Before costs. 60-point target unless stated.
+
+| Group | Trades | Win % | Avg R | +/- | Avg R (90) |
+|---|---|---|---|---|---|
+| Test 1: all micro balances, FRESH | 13 | 30.8 | +0.05 | 0.45 | +0.06 |
+| All micro balances, original period | 42 | 40.5 | +0.38 | 0.26 | +0.10 |
+| Placebo, FRESH | 18 | 27.8 | -0.06 | 0.37 | +0.02 |
+| Test 2: thin between, FRESH | 7 | 42.9 | +0.46 | 0.69 | +0.31 |
+| Not thin, FRESH | 6 | 16.7 | -0.43 | 0.57 | -0.23 |
+
+Both periods together (31 months):
+
+| Group | Trades | Win % | Avg R | +/- | Avg R (90) |
+|---|---|---|---|---|---|
+| All micro balances | 55 | 38.2 | +0.30 | 0.22 | +0.09 |
+| Thin between | 24 | 45.8 | +0.56 | 0.35 | +0.34 |
+| Not thin | 31 | 32.3 | +0.10 | 0.29 | -0.11 |
+| Placebo | 77 | 26.0 | -0.12 | 0.17 | -0.04 |
+
+### Reading
+
+- Test 1 did not confirm the original +0.38R: on fresh data the rules were
+  about break-even (+0.05R). With 13 trades it does not refute it either.
+- Test 2 kept its direction on fresh data: thin ahead of not thin at both
+  targets. 7 and 6 trades are far too few to count as confirmation.
+- Over 55 trades the setup is +0.30R at the 60-point target, about 1.4 times
+  its uncertainty, and ahead of the placebo. Still not distinguishable from
+  zero. The 90-point target shows nothing.
+- Status: an unconfirmed lead. The cheapest further evidence is logging each
+  new setup as it happens.

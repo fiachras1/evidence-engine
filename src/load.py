@@ -22,7 +22,7 @@ def load(table, files):
     con.execute(f"""
         CREATE OR REPLACE TABLE {table} AS
         SELECT DISTINCT ON (ts_event) {columns}
-        FROM read_parquet('{files}')
+        FROM read_parquet({files!r})
         ORDER BY ts_event
     """)
     n, first, last = con.execute(
@@ -30,9 +30,12 @@ def load(table, files):
     print(f"{table}: {n:,} bars from {first} to {last}")
 
 
-load("bars_1m", config.RAW_PARQUET)
+minute_files = [str(config.RAW_PARQUET)]
+if config.RAW_PARQUET_EARLY.exists():                 # earlier history, if downloaded
+    minute_files.append(str(config.RAW_PARQUET_EARLY))
+load("bars_1m", minute_files)
 if any(config.RAW_1S_DIR.glob("*.parquet")):
-    load("bars_1s", config.RAW_1S_DIR / "*.parquet")
+    load("bars_1s", str(config.RAW_1S_DIR / "*.parquet"))
 else:
     print("No 1-second data yet (optional): python src/download.py 1s")
 con.close()

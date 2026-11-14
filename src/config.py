@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 RAW_PARQUET = DATA_DIR / "raw" / "nq_ohlcv_1m.parquet"   # 1-minute bars: session stats
+RAW_PARQUET_EARLY = DATA_DIR / "raw" / "nq_ohlcv_1m_early.parquet"
 RAW_1S_DIR = DATA_DIR / "raw" / "1s"                      # 1-second bars: volume profiles
 DB_PATH = DATA_DIR / "engine.duckdb"
 SESSIONS_CSV = DATA_DIR / "sessions.csv"
@@ -17,6 +18,10 @@ SYMBOL = "NQ.v.0"       # NQ front month, rolled by volume (prices NOT back-adju
 SCHEMA = "ohlcv-1m"     # 1-minute bars
 START = "2025-01-01"
 END = "2026-11-07"      # exclusive: data runs up to the day before
+
+# Earlier history, kept aside as FRESH data: rules are fixed on START..END, then
+# run once on EARLY_START..START. Download with: python src/download.py early
+EARLY_START = "2024-05-01"
 
 # --- Volume profile settings --------------------------------------------------
 TICK = 0.25              # NQ tick size
@@ -50,3 +55,7 @@ GRADE_ORDER = ("A", "B+", "B", "C")
 
 # --- Micro balance (test 003) -----------------------------------------------------
 MICRO_SHARE = (0.05, 0.25)   # a micro balance holds between 5% and 25% of the day's volume
+# "Thin" = the thinnest point between the micro balance and the day's POC holds at
+# most this share of the POC's volume. 0.17 is the middle value across all 194
+# setups of January 2025 to November 2026, fixed before looking at any results.
+MICRO_THIN_MAX = 0.17
