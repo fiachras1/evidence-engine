@@ -229,3 +229,31 @@ def grade_ledges(daily, five_day, twenty_day, last_low, last_high):
         traded_through = last_low <= row[2] and last_high >= row[1]
         row.append("pending" if traded_through else "active")
     return [tuple(r) for r in sorted(kept, key=lambda r: -r[1])]
+
+
+def end_node(prices, vol, window, end):
+    """The node at one end of a profile: the candidate "micro balance".
+
+    end = "high" looks at the topmost node, end = "low" at the lowest one.
+    Returns None if the profile is a single node. Otherwise a dict:
+      low, high   the node's zone: where its volume is at least half its peak
+      peak        price of the node's peak
+      share       the node's share of the whole profile's volume
+    The node runs from the thin area (LVN) that separates it from the rest of
+    the profile out to the end of the profile.
+    """
+    smooth = gaussian_filter1d(vol, config.SMOOTH_PTS[window] * ROWS_PER_POINT)
+    need = config.NODE_MIN_PROMINENCE * smooth.max()
+    peaks = find_peaks(smooth, prominence=need)[0]
+    dips = find_peaks(-smooth, prominence=need)[0]
+    if len(peaks) < 2 or len(dips) == 0:
+        return None
+    if end == "high":
+        peak, start, stop = peaks[-1], dips[-1], len(smooth) - 1
+    else:
+        peak, start, stop = peaks[0], 0, dips[0]
+    if not start <= peak <= stop:
+        return None
+    body = np.flatnonzero(smooth[start:stop + 1] >= 0.5 * smooth[peak]) + start
+    return dict(low=prices[body.min()], high=prices[body.max()], peak=prices[peak],
+                share=smooth[start:stop + 1].sum() / smooth.sum())

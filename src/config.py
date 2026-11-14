@@ -47,3 +47,6 @@ GRADE_DAYS = 5               # daily profiles looked at: the last 5 sessions...
 GRADE_MAX_DAYS = 20          # ...plus earlier ones while price stayed in the same range
 GRADE_TOLERANCE = 10         # points. Ledges this close together count as the same ledge
 GRADE_ORDER = ("A", "B+", "B", "C")
+
+# --- Micro balance (test 003) -----------------------------------------------------
+MICRO_SHARE = (0.05, 0.25)   # a micro balance holds between 5% and 25% of the day's volume

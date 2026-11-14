@@ -67,6 +67,16 @@ for kind, price, strength in nodes:
 for g in ledges:                      # ledges are shaded zones; wide ones are fainter
     ax.axhspan(g.low - vp.ROW_HEIGHT / 2, g.high + vp.ROW_HEIGHT / 2,
                color="#9467bd", alpha=0.15 if g.wide else 0.45, linewidth=0)
+if window == 1:                       # micro balance candidates (test 003) are shaded green
+    for end in ("high", "low"):
+        node = vp.end_node(prices, vol, window, end)
+        if node and config.MICRO_SHARE[0] <= node["share"] <= config.MICRO_SHARE[1]:
+            ax.axhspan(node["low"], node["high"], color="#17a673", alpha=0.35, linewidth=0)
+            ax.text(vol.max() * 0.55, (node["low"] + node["high"]) / 2,
+                    f"micro balance? {node['low']:.2f} to {node['high']:.2f} "
+                    f"({node['share']:.0%} of volume)", va="center", fontsize=8, color="#0b5e41")
+            print(f"  Micro balance candidate at the {end}: {node['low']:.2f} to {node['high']:.2f}, "
+                  f"{node['share']:.0%} of the day's volume")
 ax.set_xlim(0, vol.max() * 1.25)
 ax.set_title(title)
 ax.set_xlabel(f"Volume (contracts per {config.ROW_TICKS}-tick row)")
